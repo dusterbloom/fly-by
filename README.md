@@ -1,17 +1,25 @@
-# Fly By
-### A game like experience. 
+# Vibe the Carpet
+### A magical carpet flying experience
 
-Sit back, relax and enjoy flying through undulating terrain.
+Float on a magic carpet through beautiful, never-ending procedurally generated landscapes. Collect floating mana orbs, discover hidden locations, and enjoy the serene experience of flight.
 
-This project started out as a procedural terrain generation experiment; A randomly generated 10 x 10 tile of hexagons with varying heights.
+## Features
+- Procedurally generated magical terrain with vibrant colors
+- Magic carpet flight with smooth controls
+- Collectible mana orbs that boost your score
+- Relaxing, immersive gameplay experience
+- Mobile-friendly with touch controls
 
-One thing lead to another and <a href="https://hydeit.co/fly-by/" target="_blank">Fly By</a> became the finishing result.
+## Controls
+- Arrow keys to navigate your magic carpet
+- Space bar to toggle speed
+- Z key to toggle between third-person and bird's-eye view
+- On mobile, use the on-screen joystick and buttons
 
-<a href="https://hydeit.co/fly-by/" target="_blank">Click here to play!</a>
+## Credits
+This project is a remix of the "Fly By" project, transformed into a magical carpet flying adventure.
 
 ### Gameplay
 
-![alt text](https://github.com/jessehhydee/fly-by/blob/main/assets/gameplay/gameplay-one.jpg?raw=true)
-
-![alt text](https://github.com/jessehhydee/fly-by/blob/main/assets/gameplay/gameplay-two.jpg?raw=true)
+Collect mana orbs as you soar through a never-ending landscape of vibrant colors and varying terrain.
 

@@ -26,7 +26,7 @@ html, body {
 .page-loader {
   width: calc(100vw - 15px);
   height: calc(100vh - 15px);
-  background-color: #f5e6d3;
+  background-color: #C1C8FF; /* Match our sky color */
   position: absolute;
   z-index: 100;
   top: 50%;
@@ -62,7 +62,7 @@ html, body {
   position: absolute;
   width: 4px;
   height: 0%;
-  background: #00738B;
+  background: #7B42F6; /* Bright purple to match our theme */
   z-index: 101;
 }
 
@@ -131,6 +131,21 @@ html, body {
 
 
 /* Canvas */
+
+.container {
+  position: relative;
+}
+
+.score-display {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background-color: rgba(255, 255, 255, 0.7);
+  padding: 10px 15px;
+  border-radius: 10px;
+  font-size: 18px;
+  z-index: 10;
+}
 
 .container {
   width: calc(100vw - 15px);
@@ -249,7 +264,7 @@ html, body {
 }
 
 .hex-one {
-  background: #98BF06;
+  background: #7B42F6;
   z-index: 2;
 }
 .hex-one:hover + .hex-two {
@@ -257,7 +272,7 @@ html, body {
 }
 
 .hex-two {
-  background: #367308;
+  background: #5428C0;
   z-index: 1;
   transform-origin: bottom right;
   transform: rotate(-14deg);
@@ -270,7 +285,7 @@ html, body {
 .info-modal-page {
   width: calc(100vw - 15px);
   height: calc(100vh - 15px);
-  background-color: #f5e6d3b8;
+  background-color: #C1C8FFb8; /* Match our sky color with transparency */
   position: absolute;
   z-index: -1;
   top: 50%;
@@ -284,7 +299,7 @@ html, body {
 }
 
 .info-box {
-  background-color: #efdec8;
+  background-color: #E8D5F9; /* Light purple to match our theme */
   width: 100%;
   max-width: 500px;
   margin: 30px;

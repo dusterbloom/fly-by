@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { SphereGeometry } from 'three';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.3/+esm';
 import SimplexNoise from 'https://cdn.skypack.dev/simplex-noise@3.0.0';
 import { Howl } from 'https://cdn.jsdelivr.net/npm/howler@2.2.3/+esm';
@@ -29,6 +30,9 @@ lookAtPosZ,
 thirdPerson,
 doubleSpeed,
 character,
+manaOrbs,
+orbCount,
+collectSound,
 charPosYIncrement,
 charRotateYIncrement,
 charRotateYMax,
@@ -63,7 +67,8 @@ activeKeysPressed,
 bgMusic,
 muteBgMusic,
 infoModalDisplayed,
-loadingDismissed;
+loadingDismissed,
+orbsSpawned;
 
 const setScene = async () => {
 
@@ -76,7 +81,7 @@ const setScene = async () => {
   };
 
   scene             = new THREE.Scene();
-  scene.background  = new THREE.Color(0xf5e6d3);
+  scene.background  = new THREE.Color(0xC1C8FF); // Soft light blue with purple tint
 
   flyingIn  = true;
   camY      = 160,
@@ -105,8 +110,16 @@ const setScene = async () => {
   setFog();
   setRaycast();
   setTerrainValues();
+  orbCount = 0;
+  manaOrbs = [];
+  orbsSpawned = false;
+  collectSound = new Howl({
+    src: ['https://cdn.freesound.org/previews/242/242501_4284968-lq.mp3'],
+    volume: 0.5
+  });
   await setClouds();
   await setCharacter();
+  await createManaOrbs();
   await setGrass();
   await setTrees();
   setCam();
@@ -214,7 +227,7 @@ const setFog = () => {
       ? 115
       : 72
 
-  scene.fog = new THREE.Fog(0xf5e6d3, near, far);
+  scene.fog = new THREE.Fog(0xC1C8FF, near, far);
 
 }
 
@@ -263,16 +276,16 @@ const setTerrainValues = () => {
   waterHeight           = maxHeight * 0.05;
   deepWaterHeight       = maxHeight * 0;
   textures              = {
-    snow:         new THREE.Color(0xE5E5E5),
-    lightSnow:    new THREE.Color(0x73918F),
-    rock:         new THREE.Color(0x2A2D10),
-    forest:       new THREE.Color(0x224005),
-    lightForest:  new THREE.Color(0x367308),
-    grass:        new THREE.Color(0x98BF06),
-    sand:         new THREE.Color(0xE3F272),
-    shallowWater: new THREE.Color(0x3EA9BF),
-    water:        new THREE.Color(0x00738B),
-    deepWater:    new THREE.Color(0x015373)
+    snow:         new THREE.Color(0xE8D5F9), // Light purple
+    lightSnow:    new THREE.Color(0xAD85E4), // Lavender
+    rock:         new THREE.Color(0x7649AC), // Deep purple
+    forest:       new THREE.Color(0x4834A9), // Royal purple
+    lightForest:  new THREE.Color(0x5E7BE0), // Blue-purple
+    grass:        new THREE.Color(0x7B42F6), // Bright purple
+    sand:         new THREE.Color(0xC9A0FF), // Light lavender
+    shallowWater: new THREE.Color(0x63C5FF), // Light blue
+    water:        new THREE.Color(0x3A66FF), // Bright blue
+    deepWater:    new THREE.Color(0x1A47B8) // Deep blue
   };
   terrainTiles      = [];
   
@@ -360,56 +373,127 @@ const cleanUpClouds = () => {
 }
 
 const setCharAnimation = () => {
-
-  const 
-  min = 3,
-  max = 14;
-
+  // For our simple carpet model, we'll just clear any existing animation timeout
   if(charAnimationTimeout) clearTimeout(charAnimationTimeout);
-
-  const interval = () => {
-
-    if(!gliding) 
-      charAnimation
-        .reset()
-        .setEffectiveTimeScale(doubleSpeed ? 2 : 1)
-        .setEffectiveWeight(1)
-        .setLoop(THREE.LoopRepeat)
-        .fadeIn(1)
-        .play(); 
-    else charAnimation.fadeOut(2);
-    gliding = !gliding;
-
-    const randomTime      = Math.floor(Math.random() * (max - min + 1) + min);
-    charAnimationTimeout  = setTimeout(interval, randomTime * 1000);
-    
-  }
-
-  interval();
   
+  // Since we don't have actual animations, we'll set the gliding flag
+  // to help with the floating animation in determineMovement
+  gliding = true;
+}
+
+const createManaOrbs = async () => {
+  try {
+    // Load orb model (but we'll use mesh directly for simplicity)
+    await gltfLoader.loadAsync('assets/orbs/scene.gltf');
+    
+    // Will be populated later during gameplay
+    manaOrbs = [];
+  } catch(error) {
+    console.error('Error loading orb model:', error);
+  }
+  return;
+}
+
+const spawnManaOrbs = () => {
+  if (orbsSpawned) return;
+  
+  const orbCount = 50; // Number of orbs to spawn
+  
+  for (let i = 0; i < orbCount; i++) {
+    // Create a simple sphere for our orb
+    const orbGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+    const orbMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x7B42F6,
+      emissive: 0x5428C0,
+      emissiveIntensity: 0.5,
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    const orb = new THREE.Mesh(orbGeometry, orbMaterial);
+    
+    // Position the orb randomly in the world
+    const x = (Math.random() - 0.5) * 100;
+    const y = Math.random() * 40 + 20; // Between 20-60 units high
+    const z = (Math.random() - 0.5) * 100;
+    
+    orb.position.set(x, y, z);
+    orb.name = `manaOrb-${i}`;
+    
+    // Add to scene and track in array
+    scene.add(orb);
+    manaOrbs.push(orb);
+  }
+  
+  orbsSpawned = true;
+}
+
+const checkOrbCollisions = () => {
+  if (!character || manaOrbs.length === 0) return;
+  
+  const charPosition = character.position.clone();
+  const collectionDistance = 3; // How close to collect an orb
+  
+  for (let i = manaOrbs.length - 1; i >= 0; i--) {
+    const orb = manaOrbs[i];
+    const distance = charPosition.distanceTo(orb.position);
+    
+    // Check for collision
+    if (distance < collectionDistance) {
+      // Update score
+      orbCount++;
+      document.getElementById('orb-count').textContent = orbCount;
+      
+      // Remove orb
+      scene.remove(orb);
+      manaOrbs.splice(i, 1);
+      
+      // Play sound effect (if implemented)
+      if (collectSound) collectSound.play();
+    }
+    
+    // Animate orb
+    if (orb) {
+      orb.rotation.y += 0.01;
+      orb.position.y += Math.sin(clock.getElapsedTime() + i) * 0.01;
+    }
+  }
 }
 
 const setCharacter = async () => {
+  try {
+    // Create a simple carpet shape directly instead of loading a model
+    const carpetGeometry = new THREE.BoxGeometry(2, 0.2, 3);
+    const carpetMaterial = new THREE.MeshStandardMaterial({
+      color: 0x7B42F6, // Purple
+      emissive: 0x5428C0,
+      emissiveIntensity: 0.2,
+      roughness: 0.3
+    });
 
-  const model = await gltfLoader.loadAsync('assets/bird/scene.gltf');
-  const geo   = model.scene.getObjectByName('Cube001_0').geometry.clone();
-  character   = model.scene;
+    character = new THREE.Mesh(carpetGeometry, carpetMaterial);
+    character.name = 'MagicCarpet';
 
-  character.position.set(0, 25, 0);
-  character.scale.set(1.3, 1.3, 1.3);
+    character.position.set(0, 25, 0);
+    character.scale.set(3, 1, 3);
 
-  charPosYIncrement     = 0;
-  charRotateYIncrement  = 0;
-  charRotateYMax        = 0.01;
+    charPosYIncrement     = 0;
+    charRotateYIncrement  = 0;
+    charRotateYMax        = 0.015; // Slightly more responsive turning
 
-  mixer         = new THREE.AnimationMixer(character);
-  charAnimation = mixer.clipAction(model.animations[0]);
+    // We don't have animations for the simple carpet
+    mixer = null;
+    charAnimation = null;
 
-  charNeck  = character.getObjectByName('Neck_Armature');
-  charBody  = character.getObjectByName('Armature_rootJoint');
+    // Store references for movement
+    charNeck = character;
+    charBody = character;
 
-  geo.computeBoundsTree();
-  scene.add(character);
+    carpetGeometry.computeBoundsTree();
+    scene.add(character);
+  } catch(error) {
+    console.error('Error creating carpet:', error);
+  }
 
   return;
 
@@ -778,7 +862,14 @@ const keyUp = (event) => {
 
 const determineMovement = () => {
 
-  character.translateZ(doubleSpeed ? 1 : 0.4);
+  // Smoother, slightly faster movement for the carpet
+  character.translateZ(doubleSpeed ? 1.2 : 0.5);
+  
+  // Add gentle carpet floating animation
+  if (!flyingIn && !activeKeysPressed.includes(38) && !activeKeysPressed.includes(40)) {
+    const hoverAmount = Math.sin(clock.getElapsedTime() * 1.5) * 0.05;
+    character.position.y += hoverAmount;
+  }
 
   if(flyingIn) return;
 
@@ -971,6 +1062,16 @@ const render = () => {
     calcCharPos();
     if(flyingIn) animateClouds();
     if(mixer) mixer.update(clock.getDelta());
+  
+  // Only spawn orbs after flying in
+  if(!flyingIn && !orbsSpawned) {
+    spawnManaOrbs();
+  }
+  
+  // Check for orb collections
+  if(!flyingIn && orbsSpawned) {
+    checkOrbCollisions();
+  }
   }
   renderer.render(scene, camera);
 
@@ -979,16 +1080,18 @@ const render = () => {
 }
 
 const playMusic = () => {
+  try {
+    bgMusic = new Howl({
+      src: ['https://cdn.freesound.org/previews/451/451421_2454548-lq.mp3'],
+      autoplay: true,
+      loop: true,
+      volume: 0,
+    });
 
-  bgMusic = new Howl({
-    src: ['assets/sound/bg-music.mp3'],
-    autoplay: true,
-    loop: true,
-    volume: 0,
-  });
-
-  bgMusic.play();
-
+    bgMusic.play();
+  } catch(error) {
+    console.error('Error playing background music:', error);
+  }
 }
 
 const updateMusicVolume = () => {

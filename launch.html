@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Launch Vibe the Carpet</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #C1C8FF;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #7B42F6;
+            text-align: center;
+        }
+        .instructions {
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .button {
+            display: block;
+            width: 200px;
+            margin: 20px auto;
+            padding: 15px;
+            background-color: #7B42F6;
+            color: white;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #5428C0;
+        }
+        .note {
+            margin-top: 30px;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Vibe the Carpet</h1>
+        <div class="instructions">
+            <p>To launch the game, follow these steps:</p>
+            <ol>
+                <li>Run the local server by opening a command prompt in this folder and typing: <code>node server.js</code></li>
+                <li>If you don't have Node.js installed, <a href="https://nodejs.org/" target="_blank">download and install it first</a></li>
+                <li>Once the server is running, click the button below to play the game</li>
+            </ol>
+        </div>
+        <a href="http://localhost:8080" class="button">Launch Game</a>
+        <div class="note">
+            <p><strong>Note:</strong> The game needs to run on a local server to avoid security restrictions in modern browsers that prevent loading files directly from the filesystem.</p>
+        </div>
+    </div>
+</body>
+</html>
