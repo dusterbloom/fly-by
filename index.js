@@ -95,12 +95,12 @@ const setScene = async () => {
   };
 
   scene             = new THREE.Scene();
-  scene.background  = new THREE.Color(0xC1C8FF); // Soft light blue with purple tint
+  scene.background  = new THREE.Color(0x6699FF); // Brighter blue sky like in screenshot
 
   flyingIn  = false; // Skip the intro - start immediately
   camY      = 7, // Start with camera already in position
   camZ      = -10;
-  camera    = new THREE.PerspectiveCamera(60, sizes.width / sizes.height, 1, 300);
+  camera    = new THREE.PerspectiveCamera(90, sizes.width / sizes.height, 1, 800); // Higher FOV (90) and far draw distance
   camera.position.set(0, camY, camZ);
   
   renderer = new THREE.WebGLRenderer({
@@ -232,25 +232,11 @@ const setFog = () => {
     ${FOG_APPLIED_LINE}
   `);
 
-  const near = 
-    gpuTier.tier === 1
-      ? 20
-      : gpuTier.tier === 2
-      ? 60
-      : gpuTier.tier === 3
-      ? 70
-      : 20
-  const far = 
-    gpuTier.tier === 1
-      ? 72
-      : gpuTier.tier === 2
-      ? 100
-      : gpuTier.tier === 3
-      ? 115
-      : 72
+  // Increase fog distances significantly to match the open view in the screenshot
+  const near = 150; // Much further fog start
+  const far = 600;  // Much further fog end
 
-  scene.fog = new THREE.Fog(0xC1C8FF, near, far);
-
+  scene.fog = new THREE.Fog(0x6699FF, near, far); // Match sky color
 }
 
 const setRaycast = () => {
@@ -268,14 +254,7 @@ const setRaycast = () => {
 
 const setTerrainValues = () => {
 
-  const centerTileFromTo = 
-    gpuTier.tier === 1
-      ? 15
-      : gpuTier.tier === 2
-      ? 25
-      : gpuTier.tier === 3
-      ? 30
-      : 15
+  const centerTileFromTo = 60; // MUCH larger terrain
 
   centerTile = {
     xFrom:  -centerTileFromTo,
@@ -283,31 +262,35 @@ const setTerrainValues = () => {
     yFrom:  -centerTileFromTo,
     yTo:    centerTileFromTo
   };
-  tileWidth             = centerTileFromTo * 2; // diff between xFrom - xTo (not accounting for 0)
-  amountOfHexInTile     = Math.pow((centerTile.xTo + 1) - centerTile.xFrom, 2); // +1 accounts for 0
+  tileWidth             = centerTileFromTo * 2; 
+  amountOfHexInTile     = Math.pow((centerTile.xTo + 1) - centerTile.xFrom, 2); 
   simplex               = new SimplexNoise();
-  maxHeight             = 30;
-  snowHeight            = maxHeight * 0.9;
-  lightSnowHeight       = maxHeight * 0.8;
-  rockHeight            = maxHeight * 0.7;
-  forestHeight          = maxHeight * 0.45;
-  lightForestHeight     = maxHeight * 0.32;
-  grassHeight           = maxHeight * 0.22;
-  sandHeight            = maxHeight * 0.15;
+  
+  // Much higher max height for dramatic terrain
+  maxHeight             = 70; 
+  snowHeight            = maxHeight * 0.85;
+  lightSnowHeight       = maxHeight * 0.75;
+  rockHeight            = maxHeight * 0.65;
+  forestHeight          = maxHeight * 0.5;
+  lightForestHeight     = maxHeight * 0.4;
+  grassHeight           = maxHeight * 0.25;
+  sandHeight            = maxHeight * 0.15; 
   shallowWaterHeight    = maxHeight * 0.1;
   waterHeight           = maxHeight * 0.05;
   deepWaterHeight       = maxHeight * 0;
+  
+  // More variety in colors
   textures              = {
-    snow:         new THREE.Color(0xE8D5F9), // Light purple
-    lightSnow:    new THREE.Color(0xAD85E4), // Lavender
-    rock:         new THREE.Color(0x7649AC), // Deep purple
-    forest:       new THREE.Color(0x4834A9), // Royal purple
-    lightForest:  new THREE.Color(0x5E7BE0), // Blue-purple
-    grass:        new THREE.Color(0x7B42F6), // Bright purple
-    sand:         new THREE.Color(0xC9A0FF), // Light lavender
-    shallowWater: new THREE.Color(0x63C5FF), // Light blue
-    water:        new THREE.Color(0x3A66FF), // Bright blue
-    deepWater:    new THREE.Color(0x1A47B8) // Deep blue
+    snow:         new THREE.Color(0xFFFFFF), // White snow
+    lightSnow:    new THREE.Color(0xE8E8E8), // Light snow
+    rock:         new THREE.Color(0x777777), // Dark gray rock
+    forest:       new THREE.Color(0x225522), // Dark green
+    lightForest:  new THREE.Color(0x447744), // Medium green
+    grass:        new THREE.Color(0x88BB33), // Yellowish green
+    sand:         new THREE.Color(0xEEDD88), // Bright sand
+    shallowWater: new THREE.Color(0x77AAFF), // Light blue
+    water:        new THREE.Color(0x0066DD), // Medium blue
+    deepWater:    new THREE.Color(0x003388) // Dark blue
   };
   terrainTiles      = [];
   
@@ -421,42 +404,38 @@ const setCharacter = async () => {
     // Create a simple carpet shape directly instead of loading a model
     const carpetGeometry = new THREE.BoxGeometry(2, 0.2, 3);
     const carpetMaterial = new THREE.MeshStandardMaterial({
-      color: 0x7B42F6, // Purple
-      emissive: 0x5428C0,
+      color: 0x0000FF, // Blue like in the screenshot
+      emissive: 0x0000AA,
       emissiveIntensity: 0.2,
       roughness: 0.3
     });
 
+    character = new THREE.Mesh(carpetGeometry, carpetMaterial);
+    character.name = 'MagicCarpet';
 
+    character.position.set(0, 25, 0);
+    character.scale.set(3, 1, 3);
 
-  
+    charPosYIncrement     = 0;
+    charRotateYIncrement  = 0;
+    charRotateYMax        = 0.015; // Slightly more responsive turning
 
-      character = new THREE.Mesh(carpetGeometry, carpetMaterial);
-      character.name = 'MagicCarpet';
-  
-      character.position.set(0, 25, 0);
-      character.scale.set(3, 1, 3);
-  
-      charPosYIncrement     = 0;
-      charRotateYIncrement  = 0;
-      charRotateYMax        = 0.015; // Slightly more responsive turning
-  
-      // We don't have animations for the simple carpet
-      mixer = null;
-      charAnimation = null;
-  
-      // Store references for movement
-      charNeck = character;
-      charBody = character;
-  
-      carpetGeometry.computeBoundsTree();
-      scene.add(character);
-    } catch(error) {
-      console.error('Error creating carpet:', error);
-    }
-  
-    return;
+    // We don't have animations for the simple carpet
+    mixer = null;
+    charAnimation = null;
+
+    // Store references for movement
+    charNeck = character;
+    charBody = character;
+
+    carpetGeometry.computeBoundsTree();
+    scene.add(character);
+  } catch(error) {
+    console.error('Error creating carpet:', error);
   }
+
+  return;
+}
   
   const setGrass = async () => {
   
@@ -620,8 +599,15 @@ const determineMovement = () => {
     0.05 // Smooth turning
   );
   
-  // Vertical mouse position affects pitch
-  const pitchAngle = mousePosNormalized.y * 0.5;
+  // Fix carpet orientation to be more natural (like in the screenshot)
+  // Vertical mouse position affects pitch (limit to prevent unnatural upward tilt)
+  const maxPitchUp = 0.2; // Limit upward tilt
+  const maxPitchDown = 0.5; // Allow more downward tilt
+  
+  // Calculate desired pitch based on mouse position but with limits
+  let pitchAngle = mousePosNormalized.y * 0.5;
+  pitchAngle = Math.max(-maxPitchDown, Math.min(maxPitchUp, pitchAngle));
+  
   character.rotation.x = THREE.MathUtils.lerp(
     character.rotation.x,
     pitchAngle,
@@ -644,19 +630,20 @@ const determineMovement = () => {
 const camUpdate = () => {
   if (!character) return;
 
-  // In true AC eagle style, the camera should follow slightly behind the character
-  // but along the character's orientation
-  
-  // Create a vector slightly behind and above the character in local space
-  const offset = new THREE.Vector3(0, 3, 10);
+  // Position camera much higher and further back for an expansive view like the screenshot
+  // Create a vector far behind and high above the character in local space
+  const offset = new THREE.Vector3(0, 30, 80); // Much higher and further back
   offset.applyQuaternion(character.quaternion);
   
   // Position camera relative to the character with the rotated offset
   const targetPos = character.position.clone().add(offset);
   camera.position.lerp(targetPos, 0.1); // Smooth camera movement
   
-  // Camera always looks at character
-  camera.lookAt(character.position);
+  // Look at a point ahead of the character for a more distant view
+  // This creates the open perspective from the screenshot
+  const lookAheadPoint = character.position.clone();
+  lookAheadPoint.y -= 10; // Look downward a bit more
+  camera.lookAt(lookAheadPoint);
 };
 // Event listeners setup
 const setupControls = () => {    
@@ -768,148 +755,150 @@ const keyUp = (event) => {
     createTile();
   }
   
-  const createTile = () => {
-    const tileName = JSON.stringify({
-      x: centerTile.xFrom,
-      y: centerTile.yFrom
-    });
-  
-    if(terrainTiles.some(el => el.name === tileName)) return; // Returns if tile already exists
-  
-    const tileToPosition = (tileX, height, tileY) => {
-      return new THREE.Vector3((tileX + (tileY % 2) * 0.5) * 1.68, height / 2, tileY * 1.535);
-    }
-  
-    const setHexMesh = (geo) => {
-      const mat   = new THREE.MeshStandardMaterial();
-      const mesh  = new THREE.InstancedMesh(geo, mat, amountOfHexInTile);
-  
-      mesh.castShadow     = true;
-      mesh.receiveShadow  = true;
-    
-      return mesh;
-    }
-  
-    const hexManipulator      = new THREE.Object3D();
-    const grassManipulator    = new THREE.Object3D();
-    const treeOneManipulator  = new THREE.Object3D();
-    const treeTwoManipulator  = new THREE.Object3D();
-  
-    const geo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, false);
-    const hex = setHexMesh(geo);
-    hex.name  = tileName;
-    geo.computeBoundsTree();
-  
-    const grassOne  = grassMeshes.grassMeshOne.clone();
-    grassOne.name   = tileName;
-    const grassTwo  = grassMeshes.grassMeshTwo.clone();
-    grassTwo.name   = tileName;
-  
-    const treeOne = treeMeshes.treeMeshOne.clone();
-    treeOne.name  = tileName;
-    const treeTwo = treeMeshes.treeMeshTwo.clone();
-    treeTwo.name  = tileName;
-  
-    terrainTiles.push({
-      name:   tileName,
-      hex:    hex,
-      grass:  [
-        grassOne.clone(),
-        grassTwo.clone(),
-      ],
-      trees:  [
-        treeOne.clone(),
-        treeTwo.clone(),
-      ]
-    });
-    
-    let hexCounter      = 0;
-    let grassOneCounter = 0;
-    let grassTwoCounter = 0;
-    let treeOneCounter  = 0;
-    let treeTwoCounter  = 0;
-    
-    for(let i = centerTile.xFrom; i <= centerTile.xTo; i++) {
-      for(let j = centerTile.yFrom; j <= centerTile.yTo; j++) {
-  
-        let noise1     = (simplex.noise2D(i * 0.015, j * 0.015) + 1.3) * 0.3;
-        noise1         = Math.pow(noise1, 1.2);
-        let noise2     = (simplex.noise2D(i * 0.015, j * 0.015) + 1) * 0.75;
-        noise2         = Math.pow(noise2, 1.2);
-        const height   = noise1 * noise2 * maxHeight;
-  
-        hexManipulator.scale.y = height >= sandHeight ? height : sandHeight;
-  
-        const pos = tileToPosition(i, height >= sandHeight ? height : sandHeight, j);
-        hexManipulator.position.set(pos.x, pos.y, pos.z);
-  
-        hexManipulator.updateMatrix();
-        hex.setMatrixAt(hexCounter, hexManipulator.matrix);
-  
-        if(height > snowHeight)               hex.setColorAt(hexCounter, textures.snow);
-        else if(height > lightSnowHeight)     hex.setColorAt(hexCounter, textures.lightSnow);
-        else if(height > rockHeight)          hex.setColorAt(hexCounter, textures.rock);
-        else if(height > forestHeight) {
-  
-          hex.setColorAt(hexCounter, textures.forest);
-          treeTwoManipulator.scale.set(1.1, 1.2, 1.1);
-          treeTwoManipulator.rotation.y = Math.floor(Math.random() * 3);
-          treeTwoManipulator.position.set(pos.x, (pos.y * 2) + 5, pos.z);
-          treeTwoManipulator.updateMatrix();
-  
-          if((Math.floor(Math.random() * 15)) === 0) {
-            treeTwo.setMatrixAt(treeTwoCounter, treeTwoManipulator.matrix);
-            treeTwoCounter++;
-          }
-  
-        }
-        else if(height > lightForestHeight) {
-  
-          hex.setColorAt(hexCounter, textures.lightForest);
-  
-          treeOneManipulator.scale.set(0.4, 0.4, 0.4);
-          treeOneManipulator.position.set(pos.x, (pos.y * 2), pos.z);
-          treeOneManipulator.updateMatrix();
-  
-          if((Math.floor(Math.random() * 10)) === 0) {
-            treeOne.setMatrixAt(treeOneCounter, treeOneManipulator.matrix);
-            treeOneCounter++;
-          }
-  
-        }
-        else if(height > grassHeight) {
-  
-          hex.setColorAt(hexCounter, textures.grass);
-  
-          grassManipulator.scale.set(0.15, 0.15, 0.15);
-          grassManipulator.rotation.x = -(Math.PI / 2);
-          grassManipulator.position.set(pos.x, pos.y * 2, pos.z);
-          grassManipulator.updateMatrix();
-  
-          if((Math.floor(Math.random() * 6)) === 0)
-            switch (Math.floor(Math.random() * 2) + 1) {
-              case 1:
-                grassOne.setMatrixAt(grassOneCounter, grassManipulator.matrix);
-                grassOneCounter++;
-                break;
-              case 2:
-                grassTwo.setMatrixAt(grassTwoCounter, grassManipulator.matrix);
-                grassTwoCounter++;
-                break;
-            }
-  
-        }
-        else if(height > sandHeight)          hex.setColorAt(hexCounter, textures.sand);
-        else if(height > shallowWaterHeight)  hex.setColorAt(hexCounter, textures.shallowWater);
-        else if(height > waterHeight)         hex.setColorAt(hexCounter, textures.water);
-        else if(height > deepWaterHeight)     hex.setColorAt(hexCounter, textures.deepWater);
-  
-        hexCounter++;
-      }
-    }
-  
-    scene.add(hex, grassOne, grassTwo, treeOne, treeTwo);
+const createTile = () => {
+  const tileName = JSON.stringify({
+    x: centerTile.xFrom,
+    y: centerTile.yFrom
+  });
+
+  if(terrainTiles.some(el => el.name === tileName)) return; // Returns if tile already exists
+
+  const tileToPosition = (tileX, height, tileY) => {
+    return new THREE.Vector3((tileX + (tileY % 2) * 0.5) * 3.0, height / 2, tileY * 3.0); // Wider spacing
   }
+
+  const setHexMesh = (geo) => {
+    const mat   = new THREE.MeshStandardMaterial();
+    const mesh  = new THREE.InstancedMesh(geo, mat, amountOfHexInTile);
+
+    mesh.castShadow     = true;
+    mesh.receiveShadow  = true;
+  
+    return mesh;
+  }
+
+  const hexManipulator      = new THREE.Object3D();
+  const grassManipulator    = new THREE.Object3D();
+  const treeOneManipulator  = new THREE.Object3D();
+  const treeTwoManipulator  = new THREE.Object3D();
+
+  // Use larger hex geometry for less detail but more impressive scale
+  const geo = new THREE.CylinderGeometry(3, 3, 1, 6, 1, false);
+  const hex = setHexMesh(geo);
+  hex.name  = tileName;
+  geo.computeBoundsTree();
+
+  const grassOne  = grassMeshes.grassMeshOne.clone();
+  grassOne.name   = tileName;
+  const grassTwo  = grassMeshes.grassMeshTwo.clone();
+  grassTwo.name   = tileName;
+
+  const treeOne = treeMeshes.treeMeshOne.clone();
+  treeOne.name  = tileName;
+  const treeTwo = treeMeshes.treeMeshTwo.clone();
+  treeTwo.name  = tileName;
+
+  terrainTiles.push({
+    name:   tileName,
+    hex:    hex,
+    grass:  [
+      grassOne.clone(),
+      grassTwo.clone(),
+    ],
+    trees:  [
+      treeOne.clone(),
+      treeTwo.clone(),
+    ]
+  });
+  
+  let hexCounter      = 0;
+  let grassOneCounter = 0;
+  let grassTwoCounter = 0;
+  let treeOneCounter  = 0;
+  let treeTwoCounter  = 0;
+  
+  for(let i = centerTile.xFrom; i <= centerTile.xTo; i += 2) { // Increase step size for less detail
+    for(let j = centerTile.yFrom; j <= centerTile.yTo; j += 2) { // Increase step size for less detail
+
+      // Use more dramatic noise values for greater height variations
+      let noise1     = (simplex.noise2D(i * 0.01, j * 0.01) + 1.5) * 0.35; // More dramatic mountain ranges
+      noise1         = Math.pow(noise1, 1.5); // More exponential growth
+      let noise2     = (simplex.noise2D(i * 0.015, j * 0.015) + 1) * 0.85;
+      noise2         = Math.pow(noise2, 1.3);
+      const height   = noise1 * noise2 * maxHeight;
+
+      hexManipulator.scale.y = height >= sandHeight ? height : sandHeight;
+
+      const pos = tileToPosition(i, height >= sandHeight ? height : sandHeight, j);
+      hexManipulator.position.set(pos.x, pos.y, pos.z);
+
+      hexManipulator.updateMatrix();
+      hex.setMatrixAt(hexCounter, hexManipulator.matrix);
+
+      if(height > snowHeight)               hex.setColorAt(hexCounter, textures.snow);
+      else if(height > lightSnowHeight)     hex.setColorAt(hexCounter, textures.lightSnow);
+      else if(height > rockHeight)          hex.setColorAt(hexCounter, textures.rock);
+      else if(height > forestHeight) {
+
+        hex.setColorAt(hexCounter, textures.forest);
+        treeTwoManipulator.scale.set(2.5, 3.0, 2.5); // Larger trees but fewer
+        treeTwoManipulator.rotation.y = Math.floor(Math.random() * 3);
+        treeTwoManipulator.position.set(pos.x, (pos.y * 2) + 10, pos.z);
+        treeTwoManipulator.updateMatrix();
+
+        if((Math.floor(Math.random() * 50)) === 0) { // Much less frequent trees
+          treeTwo.setMatrixAt(treeTwoCounter, treeTwoManipulator.matrix);
+          treeTwoCounter++;
+        }
+
+      }
+      else if(height > lightForestHeight) {
+
+        hex.setColorAt(hexCounter, textures.lightForest);
+
+        treeOneManipulator.scale.set(1.0, 1.0, 1.0); // Larger trees
+        treeOneManipulator.position.set(pos.x, (pos.y * 2) + 2, pos.z);
+        treeOneManipulator.updateMatrix();
+
+        if((Math.floor(Math.random() * 40)) === 0) { // Much less frequent trees
+          treeOne.setMatrixAt(treeOneCounter, treeOneManipulator.matrix);
+          treeOneCounter++;
+        }
+
+      }
+      else if(height > grassHeight) {
+
+        hex.setColorAt(hexCounter, textures.grass);
+
+        grassManipulator.scale.set(0.5, 0.5, 0.5); // Larger grass
+        grassManipulator.rotation.x = -(Math.PI / 2);
+        grassManipulator.position.set(pos.x, pos.y * 2, pos.z);
+        grassManipulator.updateMatrix();
+
+        if((Math.floor(Math.random() * 60)) === 0) // Much less frequent grass
+          switch (Math.floor(Math.random() * 2) + 1) {
+            case 1:
+              grassOne.setMatrixAt(grassOneCounter, grassManipulator.matrix);
+              grassOneCounter++;
+              break;
+            case 2:
+              grassTwo.setMatrixAt(grassTwoCounter, grassManipulator.matrix);
+              grassTwoCounter++;
+              break;
+          }
+
+      }
+      else if(height > sandHeight)          hex.setColorAt(hexCounter, textures.sand);
+      else if(height > shallowWaterHeight)  hex.setColorAt(hexCounter, textures.shallowWater);
+      else if(height > waterHeight)         hex.setColorAt(hexCounter, textures.water);
+      else if(height > deepWaterHeight)     hex.setColorAt(hexCounter, textures.deepWater);
+
+      hexCounter++;
+    }
+  }
+
+  scene.add(hex, grassOne, grassTwo, treeOne, treeTwo);
+}
   
   const cleanUpTiles = () => {
     for(let i = terrainTiles.length - 1; i >= 0; i--) {
