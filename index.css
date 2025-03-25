@@ -159,6 +159,7 @@ html, body {
 
 .canvas {
   border-radius: 10px;
+  cursor: crosshair; /* Simple crosshair cursor */
 }
 
 

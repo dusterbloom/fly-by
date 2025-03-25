@@ -5,6 +5,8 @@ import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'https:
 import SimplexNoise from 'https://cdn.skypack.dev/simplex-noise@3.0.0';
 import { Howl } from 'https://cdn.jsdelivr.net/npm/howler@2.2.3/+esm';
 import { getGPUTier } from 'https://cdn.jsdelivr.net/npm/detect-gpu@5.0.17/+esm';
+// Import lodash for vector utilities if needed
+import _ from 'https://cdn.skypack.dev/lodash';
 
 const container = document.querySelector('.container');
 const canvas    = document.querySelector('.canvas');
@@ -68,7 +70,19 @@ bgMusic,
 muteBgMusic,
 infoModalDisplayed,
 loadingDismissed,
-orbsSpawned;
+orbsSpawned,
+// Flight control variables
+currentSpeed,
+maxSpeed,
+minSpeed,
+pointerLocked; // Track if pointer is locked
+
+const setupCursorIndicator = () => {
+  cursorIndicator = document.querySelector('.cursor-indicator');
+  if (!cursorIndicator) {
+    console.error('Cursor indicator element not found');
+  }
+};
 
 const setScene = async () => {
 
@@ -83,9 +97,9 @@ const setScene = async () => {
   scene             = new THREE.Scene();
   scene.background  = new THREE.Color(0xC1C8FF); // Soft light blue with purple tint
 
-  flyingIn  = true;
-  camY      = 160,
-  camZ      = -190;
+  flyingIn  = false; // Skip the intro - start immediately
+  camY      = 7, // Start with camera already in position
+  camZ      = -10;
   camera    = new THREE.PerspectiveCamera(60, sizes.width / sizes.height, 1, 300);
   camera.position.set(0, camY, camZ);
   
@@ -105,6 +119,12 @@ const setScene = async () => {
   activeKeysPressed   = [];
   muteBgMusic         = true;
   infoModalDisplayed  = false;
+  
+  // Flight control initializations
+  currentSpeed = 0;
+  maxSpeed = 1.0;
+  minSpeed = -0.3; // Allow some reverse movement
+  pointerLocked = false;
 
   joystick();
   setFog();
@@ -128,11 +148,13 @@ const setScene = async () => {
   calcCharPos();
   resize();
   listenTo();
+  
+  // Skip loading screen
+  loadingDismissed = true;
+  document.querySelector('.page-loader').style.display = 'none';
+  
   render();
-
-  pauseIconAnimation();
-  checkLoadingPage();
-
+  playMusic();
 }
 
 const joystick = () => {
@@ -394,72 +416,6 @@ const createManaOrbs = async () => {
   return;
 }
 
-const spawnManaOrbs = () => {
-  if (orbsSpawned) return;
-  
-  const orbCount = 50; // Number of orbs to spawn
-  
-  for (let i = 0; i < orbCount; i++) {
-    // Create a simple sphere for our orb
-    const orbGeometry = new THREE.SphereGeometry(0.5, 16, 16);
-    const orbMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x7B42F6,
-      emissive: 0x5428C0,
-      emissiveIntensity: 0.5,
-      transparent: true,
-      opacity: 0.8
-    });
-    
-    const orb = new THREE.Mesh(orbGeometry, orbMaterial);
-    
-    // Position the orb randomly in the world
-    const x = (Math.random() - 0.5) * 100;
-    const y = Math.random() * 40 + 20; // Between 20-60 units high
-    const z = (Math.random() - 0.5) * 100;
-    
-    orb.position.set(x, y, z);
-    orb.name = `manaOrb-${i}`;
-    
-    // Add to scene and track in array
-    scene.add(orb);
-    manaOrbs.push(orb);
-  }
-  
-  orbsSpawned = true;
-}
-
-const checkOrbCollisions = () => {
-  if (!character || manaOrbs.length === 0) return;
-  
-  const charPosition = character.position.clone();
-  const collectionDistance = 3; // How close to collect an orb
-  
-  for (let i = manaOrbs.length - 1; i >= 0; i--) {
-    const orb = manaOrbs[i];
-    const distance = charPosition.distanceTo(orb.position);
-    
-    // Check for collision
-    if (distance < collectionDistance) {
-      // Update score
-      orbCount++;
-      document.getElementById('orb-count').textContent = orbCount;
-      
-      // Remove orb
-      scene.remove(orb);
-      manaOrbs.splice(i, 1);
-      
-      // Play sound effect (if implemented)
-      if (collectSound) collectSound.play();
-    }
-    
-    // Animate orb
-    if (orb) {
-      orb.rotation.y += 0.01;
-      orb.position.y += Math.sin(clock.getElapsedTime() + i) * 0.01;
-    }
-  }
-}
-
 const setCharacter = async () => {
   try {
     // Create a simple carpet shape directly instead of loading a model
@@ -471,572 +427,739 @@ const setCharacter = async () => {
       roughness: 0.3
     });
 
-    character = new THREE.Mesh(carpetGeometry, carpetMaterial);
-    character.name = 'MagicCarpet';
 
-    character.position.set(0, 25, 0);
-    character.scale.set(3, 1, 3);
 
-    charPosYIncrement     = 0;
-    charRotateYIncrement  = 0;
-    charRotateYMax        = 0.015; // Slightly more responsive turning
+  
 
-    // We don't have animations for the simple carpet
-    mixer = null;
-    charAnimation = null;
-
-    // Store references for movement
-    charNeck = character;
-    charBody = character;
-
-    carpetGeometry.computeBoundsTree();
-    scene.add(character);
-  } catch(error) {
-    console.error('Error creating carpet:', error);
-  }
-
-  return;
-
-}
-
-const setGrass = async () => {
-
-  grassMeshes           = {};
-  const model           = await gltfLoader.loadAsync('assets/grass/scene.gltf');
-  const grassMeshNames  = [
-    {
-      varName:  'grassMeshOne',
-      meshName: 'Circle015_Grass_0'
-    },
-    {
-      varName:  'grassMeshTwo',
-      meshName: 'Circle018_Grass_0'
+      character = new THREE.Mesh(carpetGeometry, carpetMaterial);
+      character.name = 'MagicCarpet';
+  
+      character.position.set(0, 25, 0);
+      character.scale.set(3, 1, 3);
+  
+      charPosYIncrement     = 0;
+      charRotateYIncrement  = 0;
+      charRotateYMax        = 0.015; // Slightly more responsive turning
+  
+      // We don't have animations for the simple carpet
+      mixer = null;
+      charAnimation = null;
+  
+      // Store references for movement
+      charNeck = character;
+      charBody = character;
+  
+      carpetGeometry.computeBoundsTree();
+      scene.add(character);
+    } catch(error) {
+      console.error('Error creating carpet:', error);
     }
-  ];
-
-  for(let i = 0; i < grassMeshNames.length; i++) {
-    const mesh  = model.scene.getObjectByName(grassMeshNames[i].meshName);
-    const geo   = mesh.geometry.clone();
-    const mat   = mesh.material.clone();
-    grassMeshes[grassMeshNames[i].varName] = new THREE.InstancedMesh(geo, mat, Math.floor(amountOfHexInTile / 40));
+  
+    return;
   }
-
-  return;
-
-}
-
-const setTrees = async () => {
-
-  treeMeshes          = {};
-  const treeMeshNames = [
-    {
-      varName:    'treeMeshOne',
-      modelPath:  'assets/trees/pine/scene.gltf',
-      meshName:   'Object_4'
-    },
-    {
-      varName:    'treeMeshTwo',
-      modelPath:  'assets/trees/twisted-branches/scene.gltf',
-      meshName:   'Tree_winding_01_Material_0'
+  
+  const setGrass = async () => {
+  
+    grassMeshes           = {};
+    const model           = await gltfLoader.loadAsync('assets/grass/scene.gltf');
+    const grassMeshNames  = [
+      {
+        varName:  'grassMeshOne',
+        meshName: 'Circle015_Grass_0'
+      },
+      {
+        varName:  'grassMeshTwo',
+        meshName: 'Circle018_Grass_0'
+      }
+    ];
+  
+    for(let i = 0; i < grassMeshNames.length; i++) {
+      const mesh  = model.scene.getObjectByName(grassMeshNames[i].meshName);
+      const geo   = mesh.geometry.clone();
+      const mat   = mesh.material.clone();
+      grassMeshes[grassMeshNames[i].varName] = new THREE.InstancedMesh(geo, mat, Math.floor(amountOfHexInTile / 40));
     }
-  ];
-
-  for(let i = 0; i < treeMeshNames.length; i++) {
-    const model  = await gltfLoader.loadAsync(treeMeshNames[i].modelPath);
-    const mesh  = model.scene.getObjectByName(treeMeshNames[i].meshName);
-    const geo   = mesh.geometry.clone();
-    const mat   = mesh.material.clone();
-    treeMeshes[treeMeshNames[i].varName] = new THREE.InstancedMesh(geo, mat, Math.floor(amountOfHexInTile / 45));
+  
+    return;
   }
-
-  return;
-
-}
-
+  
+  const setTrees = async () => {
+  
+    treeMeshes          = {};
+    const treeMeshNames = [
+      {
+        varName:    'treeMeshOne',
+        modelPath:  'assets/trees/pine/scene.gltf',
+        meshName:   'Object_4'
+      },
+      {
+        varName:    'treeMeshTwo',
+        modelPath:  'assets/trees/twisted-branches/scene.gltf',
+        meshName:   'Tree_winding_01_Material_0'
+      }
+    ];
+  
+    for(let i = 0; i < treeMeshNames.length; i++) {
+      const model  = await gltfLoader.loadAsync(treeMeshNames[i].modelPath);
+      const mesh  = model.scene.getObjectByName(treeMeshNames[i].meshName);
+      const geo   = mesh.geometry.clone();
+      const mat   = mesh.material.clone();
+      treeMeshes[treeMeshNames[i].varName] = new THREE.InstancedMesh(geo, mat, Math.floor(amountOfHexInTile / 45));
+    }
+  
+    return;
+  }
+  
+  // Initialize camera and character positions
 const setCam = () => {
-
   currentPos    = new THREE.Vector3();
   currentLookAt = new THREE.Vector3();
   lookAtPosZ    = 15;
   thirdPerson   = true;
   doubleSpeed   = false;
-
-}
-
-const createSurroundingTiles = (newActiveTile) => {
-
-  const setCenterTile = (parsedCoords) => {
-    centerTile = {
-      xFrom:  parsedCoords.x,
-      xTo:    parsedCoords.x + tileWidth,
-      yFrom:  parsedCoords.y,
-      yTo:    parsedCoords.y + tileWidth
-    }
-  }
-
-  const parsedCoords = JSON.parse(newActiveTile);
-
-  setCenterTile(parsedCoords);
-
-  tileYNegative();
-
-  tileXPositive();
-
-  tileYPositive();
-  tileYPositive();
-
-  tileXNegative();
-  tileXNegative();
-
-  tileYNegative();
-  tileYNegative();
-
-  setCenterTile(parsedCoords);
-
-  cleanUpTiles();
-
-  activeTile = newActiveTile;
-
-}
-
-const tileYNegative = () => {
-
-  centerTile.yFrom -= tileWidth;
-  centerTile.yTo -= tileWidth;
-  createTile();
-
-}
-
-const tileYPositive = () => {
-
-  centerTile.yFrom += tileWidth;
-  centerTile.yTo += tileWidth;
-  createTile();
-
-}
-
-const tileXNegative = () => {
-
-  centerTile.xFrom -= tileWidth;
-  centerTile.xTo -= tileWidth;
-  createTile();
-
-}
-
-const tileXPositive = () => {
-
-  centerTile.xFrom += tileWidth;
-  centerTile.xTo += tileWidth;
-  createTile();
-
-}
-
-const createTile = () => {
-
-  const tileName = JSON.stringify({
-    x: centerTile.xFrom,
-    y: centerTile.yFrom
-  });
-
-  if(terrainTiles.some(el => el.name === tileName)) return; // Returns if tile already exists
-
-  const tileToPosition = (tileX, height, tileY) => {
-    return new THREE.Vector3((tileX + (tileY % 2) * 0.5) * 1.68, height / 2, tileY * 1.535);
-  }
-
-  const setHexMesh = (geo) => {
-
-    const mat   = new THREE.MeshStandardMaterial();
-    const mesh  = new THREE.InstancedMesh(geo, mat, amountOfHexInTile);
-
-    mesh.castShadow     = true;
-    mesh.receiveShadow  = true;
   
-    return mesh;
-
-  }
-
-  const hexManipulator      = new THREE.Object3D();
-  const grassManipulator    = new THREE.Object3D();
-  const treeOneManipulator  = new THREE.Object3D();
-  const treeTwoManipulator  = new THREE.Object3D();
-
-  const geo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, false);
-  const hex = setHexMesh(geo);
-  hex.name  = tileName;
-  geo.computeBoundsTree();
-
-  const grassOne  = grassMeshes.grassMeshOne.clone();
-  grassOne.name   = tileName;
-  const grassTwo  = grassMeshes.grassMeshTwo.clone();
-  grassTwo.name   = tileName;
-
-  const treeOne = treeMeshes.treeMeshOne.clone();
-  treeOne.name  = tileName;
-  const treeTwo = treeMeshes.treeMeshTwo.clone();
-  treeTwo.name  = tileName;
-
-  terrainTiles.push({
-    name:   tileName,
-    hex:    hex,
-    grass:  [
-      grassOne.clone(),
-      grassTwo.clone(),
-    ],
-    trees:  [
-      treeOne.clone(),
-      treeTwo.clone(),
-    ]
-  });
-  
-  let hexCounter      = 0;
-  let grassOneCounter = 0;
-  let grassTwoCounter = 0;
-  let treeOneCounter  = 0;
-  let treeTwoCounter  = 0;
-  
-  for(let i = centerTile.xFrom; i <= centerTile.xTo; i++) {
-    for(let j = centerTile.yFrom; j <= centerTile.yTo; j++) {
-
-      let noise1     = (simplex.noise2D(i * 0.015, j * 0.015) + 1.3) * 0.3;
-      noise1         = Math.pow(noise1, 1.2);
-      let noise2     = (simplex.noise2D(i * 0.015, j * 0.015) + 1) * 0.75;
-      noise2         = Math.pow(noise2, 1.2);
-      const height   = noise1 * noise2 * maxHeight;
-
-      hexManipulator.scale.y = height >= sandHeight ? height : sandHeight;
-
-      const pos = tileToPosition(i, height >= sandHeight ? height : sandHeight, j);
-      hexManipulator.position.set(pos.x, pos.y, pos.z);
-
-      hexManipulator.updateMatrix();
-      hex.setMatrixAt(hexCounter, hexManipulator.matrix);
-
-      if(height > snowHeight)               hex.setColorAt(hexCounter, textures.snow);
-      else if(height > lightSnowHeight)     hex.setColorAt(hexCounter, textures.lightSnow);
-      else if(height > rockHeight)          hex.setColorAt(hexCounter, textures.rock);
-      else if(height > forestHeight) {
-
-        hex.setColorAt(hexCounter, textures.forest);
-        treeTwoManipulator.scale.set(1.1, 1.2, 1.1);
-        treeTwoManipulator.rotation.y = Math.floor(Math.random() * 3);
-        treeTwoManipulator.position.set(pos.x, (pos.y * 2) + 5, pos.z);
-        treeTwoManipulator.updateMatrix();
-
-        if((Math.floor(Math.random() * 15)) === 0) {
-          treeTwo.setMatrixAt(treeTwoCounter, treeTwoManipulator.matrix);
-          treeTwoCounter++;
-        }
-
-      }
-      else if(height > lightForestHeight) {
-
-        hex.setColorAt(hexCounter, textures.lightForest);
-
-        treeOneManipulator.scale.set(0.4, 0.4, 0.4);
-        treeOneManipulator.position.set(pos.x, (pos.y * 2), pos.z);
-        treeOneManipulator.updateMatrix();
-
-        if((Math.floor(Math.random() * 10)) === 0) {
-          treeOne.setMatrixAt(treeOneCounter, treeOneManipulator.matrix);
-          treeOneCounter++;
-        }
-
-      }
-      else if(height > grassHeight) {
-
-        hex.setColorAt(hexCounter, textures.grass);
-
-        grassManipulator.scale.set(0.15, 0.15, 0.15);
-        grassManipulator.rotation.x = -(Math.PI / 2);
-        grassManipulator.position.set(pos.x, pos.y * 2, pos.z);
-        grassManipulator.updateMatrix();
-
-        if((Math.floor(Math.random() * 6)) === 0)
-          switch (Math.floor(Math.random() * 2) + 1) {
-            case 1:
-              grassOne.setMatrixAt(grassOneCounter, grassManipulator.matrix);
-              grassOneCounter++;
-              break;
-            case 2:
-              grassTwo.setMatrixAt(grassTwoCounter, grassManipulator.matrix);
-              grassTwoCounter++;
-              break;
-          }
-
-      }
-      else if(height > sandHeight)          hex.setColorAt(hexCounter, textures.sand);
-      else if(height > shallowWaterHeight)  hex.setColorAt(hexCounter, textures.shallowWater);
-      else if(height > waterHeight)         hex.setColorAt(hexCounter, textures.water);
-      else if(height > deepWaterHeight)     hex.setColorAt(hexCounter, textures.deepWater);
-
-      hexCounter++;
-
-    }
-  }
-
-  scene.add(hex, grassOne, grassTwo, treeOne, treeTwo);
-
+  // Set initial camera position to be behind the character
+  // and rotate to look at the character
+  const offset = new THREE.Vector3(0, 5, 10); // Above and behind
+  camera.position.copy(character.position).add(offset);
+  camera.lookAt(character.position);
 }
 
-const cleanUpTiles = () => {
 
-  for(let i = terrainTiles.length - 1; i >= 0; i--) {
 
-    let tileCoords  = JSON.parse(terrainTiles[i].hex.name);
-    tileCoords      = {
-      xFrom:  tileCoords.x,
-      xTo:    tileCoords.x + tileWidth,
-      yFrom:  tileCoords.y,
-      yTo:    tileCoords.y + tileWidth
-    }
+// Movement state variables
+let mousePos = new THREE.Vector2(0, 0);
+let moveForward = false;
+let moveBackward = false;
+let bankLeft = false;
+let bankRight = false;
+let moveUp = false;
+let moveDown = false;
 
-    if(
-      tileCoords.xFrom < centerTile.xFrom - tileWidth ||
-      tileCoords.xTo > centerTile.xTo + tileWidth ||
-      tileCoords.yFrom < centerTile.yFrom - tileWidth ||
-      tileCoords.yTo > centerTile.yTo + tileWidth
-    ) {
 
-      const tile = scene.getObjectsByProperty('name', terrainTiles[i].hex.name);
-      for(let o = 0; o < tile.length; o++) cleanUp(tile[o]);
+// Debug overlay
+const debugDiv = document.createElement('div');
+debugDiv.style.position = 'fixed';
+debugDiv.style.top = '10px';
+debugDiv.style.left = '10px';
+debugDiv.style.backgroundColor = 'rgba(0,0,0,0.7)';
+debugDiv.style.color = 'white';
+debugDiv.style.padding = '10px';
+debugDiv.style.fontFamily = 'monospace';
+debugDiv.style.zIndex = '1000';
+document.body.appendChild(debugDiv);
 
-      terrainTiles.splice(i, 1);
+const logDebug = (data) => {
+    debugDiv.innerHTML = `
+        Mouse Pos: ${data.mousePos ? data.mousePos.map(v => v.toFixed(2)).join(', ') : '0, 0'}<br>
+        Mouse Dir: ${data.mouseDir.map(v => v.toFixed(2)).join(', ')}<br>
+        Speed: ${data.speed.toFixed(2)}<br>
+        Pos: ${data.pos.map(v => v.toFixed(2)).join(', ')}<br>
+        Rot: ${data.rot.map(v => v.toFixed(2)).join(', ')}<br>
+    `;
+};
 
-    }
-
-  }
-
+const onMouseMove = (event) => {
+  // Simply track mouse position
+  mousePos.x = event.clientX;
+  mousePos.y = event.clientY;
 }
 
-const resize = () => {
 
-  sizes = {
-    width:  container.offsetWidth,
-    height: container.offsetHeight
+// Movement update function - TRUE Assassin's Creed eagle style
+const determineMovement = () => {
+  if (!character) return;
+
+  // Get window dimensions for mouse position normalization
+  const windowWidth = window.innerWidth;
+  const windowHeight = window.innerHeight;
+  
+  // Calculate normalized mouse position (-1 to 1)
+  const mousePosNormalized = {
+    x: (mousePos.x / windowWidth) * 2 - 1,
+    y: (mousePos.y / windowHeight) * 2 - 1
   };
+  
+  // Determine speed based on whether boost is active
+  const speed = moveForward ? (doubleSpeed ? 1.0 : 0.5) : 0;
+  
+  // Only move if W is pressed - no automatic movement
+  if (moveForward) {
+    // Movement direction based on carpet's orientation
+    const direction = new THREE.Vector3(0, 0, -1); // Forward is negative Z in three.js
+    direction.applyQuaternion(character.quaternion);
+    
+    // Apply movement
+    character.position.x += direction.x * speed;
+    character.position.z += direction.z * speed;
+  }
+  
+  // Backward movement (slower)
+  if (moveBackward) {
+    const direction = new THREE.Vector3(0, 0, 1);
+    direction.applyQuaternion(character.quaternion);
+    
+    // Apply slower backward movement
+    character.position.x += direction.x * speed * 0.5;
+    character.position.z += direction.z * speed * 0.5;
+  }
+  
+  // Direct up/down (Y-axis) movement
+  if (moveUp) {
+    character.position.y += speed * 0.5;
+  }
+  if (moveDown) {
+    character.position.y -= speed * 0.5;
+  }
+  
+  // Use mouse for rotation control
+  // Horizontal mouse position affects rotation (yaw)
+  character.rotation.y = THREE.MathUtils.lerp(
+    character.rotation.y,
+    -mousePosNormalized.x * Math.PI, // Full 180° turn based on mouse position
+    0.05 // Smooth turning
+  );
+  
+  // Vertical mouse position affects pitch
+  const pitchAngle = mousePosNormalized.y * 0.5;
+  character.rotation.x = THREE.MathUtils.lerp(
+    character.rotation.x,
+    pitchAngle,
+    0.05 // Smooth pitching
+  );
+  
+  // Calculate banking angle based on turning (roll)
+  const bankAngle = -mousePosNormalized.x * 0.5; // Bank while turning
+  character.rotation.z = THREE.MathUtils.lerp(
+    character.rotation.z,
+    bankAngle,
+    0.1 // Smooth banking
+  );
+  
+  // Gentle hover effect
+  const hoverAmount = Math.sin(clock.getElapsedTime() * 2) * 0.1;
+  character.position.y += hoverAmount;
+};
 
-  camera.aspect = sizes.width / sizes.height;
-  camera.updateProjectionMatrix();
+const camUpdate = () => {
+  if (!character) return;
 
-  renderer.setSize(sizes.width, sizes.height);
+  // In true AC eagle style, the camera should follow slightly behind the character
+  // but along the character's orientation
+  
+  // Create a vector slightly behind and above the character in local space
+  const offset = new THREE.Vector3(0, 3, 10);
+  offset.applyQuaternion(character.quaternion);
+  
+  // Position camera relative to the character with the rotated offset
+  const targetPos = character.position.clone().add(offset);
+  camera.position.lerp(targetPos, 0.1); // Smooth camera movement
+  
+  // Camera always looks at character
+  camera.lookAt(character.position);
+};
+// Event listeners setup
+const setupControls = () => {    
+    // Input handlers
+    document.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('keydown', keyDown);
+    window.addEventListener('keyup', keyUp);
+};
 
+// Keyboard input handlers
+const keyDown = (event) => {
+    if(infoModalDisplayed) return;
+
+    const keyCode = typeof event.keyCode === 'number' ? event.keyCode : event.which;
+    
+    // Prevent default actions for game control keys
+    if([32, 87, 83, 65, 68, 16].includes(keyCode)) {
+        event.preventDefault();
+    }
+
+    if(!activeKeysPressed.includes(keyCode)) {
+        activeKeysPressed.push(keyCode);
+    }
+    
+    // Set movement flags based on keys
+    if(keyCode === 87) moveForward = true;  // W
+    if(keyCode === 83) moveBackward = true; // S
+    if(keyCode === 65) bankLeft = true;     // A
+    if(keyCode === 68) bankRight = true;    // D
+    if(keyCode === 81) moveUp = true;       // Q
+    if(keyCode === 69) moveDown = true;     // E
+};
+
+const keyUp = (event) => {
+    if(event.keyCode === 32) toggleDoubleSpeed();
+    if(event.keyCode === 90) toggleBirdsEyeView();
+
+    const index = activeKeysPressed.indexOf(event.keyCode);
+    if (index !== -1) {
+        activeKeysPressed.splice(index, 1);
+    }
+    
+    // Clear movement flags based on keys
+    if(event.keyCode === 87) moveForward = false;  // W
+    if(event.keyCode === 83) moveBackward = false; // S
+    if(event.keyCode === 65) bankLeft = false;     // A
+    if(event.keyCode === 68) bankRight = false;    // D
+    if(event.keyCode === 81) moveUp = false;       // Q
+    if(event.keyCode === 69) moveDown = false;     // E
+};
+
+
+  const createSurroundingTiles = (newActiveTile) => {
+  
+    const setCenterTile = (parsedCoords) => {
+      centerTile = {
+        xFrom:  parsedCoords.x,
+        xTo:    parsedCoords.x + tileWidth,
+        yFrom:  parsedCoords.y,
+        yTo:    parsedCoords.y + tileWidth
+      }
+    }
+  
+    const parsedCoords = JSON.parse(newActiveTile);
+  
+    setCenterTile(parsedCoords);
+  
+    tileYNegative();
+  
+    tileXPositive();
+  
+    tileYPositive();
+    tileYPositive();
+  
+    tileXNegative();
+    tileXNegative();
+  
+    tileYNegative();
+    tileYNegative();
+  
+    setCenterTile(parsedCoords);
+  
+    cleanUpTiles();
+  
+    activeTile = newActiveTile;
+  }
+  
+  const tileYNegative = () => {
+    centerTile.yFrom -= tileWidth;
+    centerTile.yTo -= tileWidth;
+    createTile();
+  }
+  
+  const tileYPositive = () => {
+    centerTile.yFrom += tileWidth;
+    centerTile.yTo += tileWidth;
+    createTile();
+  }
+  
+  const tileXNegative = () => {
+    centerTile.xFrom -= tileWidth;
+    centerTile.xTo -= tileWidth;
+    createTile();
+  }
+  
+  const tileXPositive = () => {
+    centerTile.xFrom += tileWidth;
+    centerTile.xTo += tileWidth;
+    createTile();
+  }
+  
+  const createTile = () => {
+    const tileName = JSON.stringify({
+      x: centerTile.xFrom,
+      y: centerTile.yFrom
+    });
+  
+    if(terrainTiles.some(el => el.name === tileName)) return; // Returns if tile already exists
+  
+    const tileToPosition = (tileX, height, tileY) => {
+      return new THREE.Vector3((tileX + (tileY % 2) * 0.5) * 1.68, height / 2, tileY * 1.535);
+    }
+  
+    const setHexMesh = (geo) => {
+      const mat   = new THREE.MeshStandardMaterial();
+      const mesh  = new THREE.InstancedMesh(geo, mat, amountOfHexInTile);
+  
+      mesh.castShadow     = true;
+      mesh.receiveShadow  = true;
+    
+      return mesh;
+    }
+  
+    const hexManipulator      = new THREE.Object3D();
+    const grassManipulator    = new THREE.Object3D();
+    const treeOneManipulator  = new THREE.Object3D();
+    const treeTwoManipulator  = new THREE.Object3D();
+  
+    const geo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, false);
+    const hex = setHexMesh(geo);
+    hex.name  = tileName;
+    geo.computeBoundsTree();
+  
+    const grassOne  = grassMeshes.grassMeshOne.clone();
+    grassOne.name   = tileName;
+    const grassTwo  = grassMeshes.grassMeshTwo.clone();
+    grassTwo.name   = tileName;
+  
+    const treeOne = treeMeshes.treeMeshOne.clone();
+    treeOne.name  = tileName;
+    const treeTwo = treeMeshes.treeMeshTwo.clone();
+    treeTwo.name  = tileName;
+  
+    terrainTiles.push({
+      name:   tileName,
+      hex:    hex,
+      grass:  [
+        grassOne.clone(),
+        grassTwo.clone(),
+      ],
+      trees:  [
+        treeOne.clone(),
+        treeTwo.clone(),
+      ]
+    });
+    
+    let hexCounter      = 0;
+    let grassOneCounter = 0;
+    let grassTwoCounter = 0;
+    let treeOneCounter  = 0;
+    let treeTwoCounter  = 0;
+    
+    for(let i = centerTile.xFrom; i <= centerTile.xTo; i++) {
+      for(let j = centerTile.yFrom; j <= centerTile.yTo; j++) {
+  
+        let noise1     = (simplex.noise2D(i * 0.015, j * 0.015) + 1.3) * 0.3;
+        noise1         = Math.pow(noise1, 1.2);
+        let noise2     = (simplex.noise2D(i * 0.015, j * 0.015) + 1) * 0.75;
+        noise2         = Math.pow(noise2, 1.2);
+        const height   = noise1 * noise2 * maxHeight;
+  
+        hexManipulator.scale.y = height >= sandHeight ? height : sandHeight;
+  
+        const pos = tileToPosition(i, height >= sandHeight ? height : sandHeight, j);
+        hexManipulator.position.set(pos.x, pos.y, pos.z);
+  
+        hexManipulator.updateMatrix();
+        hex.setMatrixAt(hexCounter, hexManipulator.matrix);
+  
+        if(height > snowHeight)               hex.setColorAt(hexCounter, textures.snow);
+        else if(height > lightSnowHeight)     hex.setColorAt(hexCounter, textures.lightSnow);
+        else if(height > rockHeight)          hex.setColorAt(hexCounter, textures.rock);
+        else if(height > forestHeight) {
+  
+          hex.setColorAt(hexCounter, textures.forest);
+          treeTwoManipulator.scale.set(1.1, 1.2, 1.1);
+          treeTwoManipulator.rotation.y = Math.floor(Math.random() * 3);
+          treeTwoManipulator.position.set(pos.x, (pos.y * 2) + 5, pos.z);
+          treeTwoManipulator.updateMatrix();
+  
+          if((Math.floor(Math.random() * 15)) === 0) {
+            treeTwo.setMatrixAt(treeTwoCounter, treeTwoManipulator.matrix);
+            treeTwoCounter++;
+          }
+  
+        }
+        else if(height > lightForestHeight) {
+  
+          hex.setColorAt(hexCounter, textures.lightForest);
+  
+          treeOneManipulator.scale.set(0.4, 0.4, 0.4);
+          treeOneManipulator.position.set(pos.x, (pos.y * 2), pos.z);
+          treeOneManipulator.updateMatrix();
+  
+          if((Math.floor(Math.random() * 10)) === 0) {
+            treeOne.setMatrixAt(treeOneCounter, treeOneManipulator.matrix);
+            treeOneCounter++;
+          }
+  
+        }
+        else if(height > grassHeight) {
+  
+          hex.setColorAt(hexCounter, textures.grass);
+  
+          grassManipulator.scale.set(0.15, 0.15, 0.15);
+          grassManipulator.rotation.x = -(Math.PI / 2);
+          grassManipulator.position.set(pos.x, pos.y * 2, pos.z);
+          grassManipulator.updateMatrix();
+  
+          if((Math.floor(Math.random() * 6)) === 0)
+            switch (Math.floor(Math.random() * 2) + 1) {
+              case 1:
+                grassOne.setMatrixAt(grassOneCounter, grassManipulator.matrix);
+                grassOneCounter++;
+                break;
+              case 2:
+                grassTwo.setMatrixAt(grassTwoCounter, grassManipulator.matrix);
+                grassTwoCounter++;
+                break;
+            }
+  
+        }
+        else if(height > sandHeight)          hex.setColorAt(hexCounter, textures.sand);
+        else if(height > shallowWaterHeight)  hex.setColorAt(hexCounter, textures.shallowWater);
+        else if(height > waterHeight)         hex.setColorAt(hexCounter, textures.water);
+        else if(height > deepWaterHeight)     hex.setColorAt(hexCounter, textures.deepWater);
+  
+        hexCounter++;
+      }
+    }
+  
+    scene.add(hex, grassOne, grassTwo, treeOne, treeTwo);
+  }
+  
+  const cleanUpTiles = () => {
+    for(let i = terrainTiles.length - 1; i >= 0; i--) {
+      let tileCoords  = JSON.parse(terrainTiles[i].hex.name);
+      tileCoords      = {
+        xFrom:  tileCoords.x,
+        xTo:    tileCoords.x + tileWidth,
+        yFrom:  tileCoords.y,
+        yTo:    tileCoords.y + tileWidth
+      }
+  
+      if(
+        tileCoords.xFrom < centerTile.xFrom - tileWidth ||
+        tileCoords.xTo > centerTile.xTo + tileWidth ||
+        tileCoords.yFrom < centerTile.yFrom - tileWidth ||
+        tileCoords.yTo > centerTile.yTo + tileWidth
+      ) {
+        const tile = scene.getObjectsByProperty('name', terrainTiles[i].hex.name);
+        for(let o = 0; o < tile.length; o++) cleanUp(tile[o]);
+        terrainTiles.splice(i, 1);
+      }
+    }
+  }
+  
+  const resize = () => {
+    sizes = {
+      width:  container.offsetWidth,
+      height: container.offsetHeight
+    };
+
+    camera.aspect = sizes.width / sizes.height;
+    camera.updateProjectionMatrix();
+
+    renderer.setSize(sizes.width, sizes.height);
 }
-
 
 const toggleDoubleSpeed = () => {
-
   if(flyingIn) return;
-
   doubleSpeed = doubleSpeed ? false : true;
-  charRotateYMax = doubleSpeed ? 0.02 : 0.01;
+  // Visual feedback for speed change
+  const speedIcon = document.querySelector('.hex-speed img');
+  if (speedIcon) {
+    speedIcon.style.filter = doubleSpeed ? 'brightness(1.5) hue-rotate(45deg)' : '';
+  }
   setCharAnimation();
-
 }
 
 const toggleBirdsEyeView = () => {
-
   if(flyingIn) return;
   thirdPerson = thirdPerson ? false : true;
-
 }
 
-const keyDown = (event) => {
+// Make sure the pointerlockchange event updates the pointerLocked variable
+document.addEventListener('pointerlockchange', () => {
+  pointerLocked = document.pointerLockElement === document.body;
+  console.log('Pointer lock changed:', pointerLocked);
+});
 
-  if(infoModalDisplayed) return;
 
-  if(!activeKeysPressed.includes(event.keyCode)) 
-    activeKeysPressed.push(event.keyCode);
-    
-}
 
-const keyUp = (event) => {
-
-  if(event.keyCode === 32) toggleDoubleSpeed();
-  if(event.keyCode === 90) toggleBirdsEyeView();
-
-  const index = activeKeysPressed.indexOf(event.keyCode);
-  activeKeysPressed.splice(index, 1);
-
-}
-
-const determineMovement = () => {
-
-  // Smoother, slightly faster movement for the carpet
-  character.translateZ(doubleSpeed ? 1.2 : 0.5);
-  
-  // Add gentle carpet floating animation
-  if (!flyingIn && !activeKeysPressed.includes(38) && !activeKeysPressed.includes(40)) {
-    const hoverAmount = Math.sin(clock.getElapsedTime() * 1.5) * 0.05;
-    character.position.y += hoverAmount;
-  }
-
-  if(flyingIn) return;
-
-  if(activeKeysPressed.includes(38)) { // up arrow
-    if(character.position.y < 90) {
-      character.position.y += charPosYIncrement;
-      if(charPosYIncrement < 0.3) charPosYIncrement += 0.02;
-      if(charNeck.rotation.x > -0.6) charNeck.rotation.x -= 0.06;
-      if(charBody.rotation.x > -0.4) charBody.rotation.x -= 0.04;
-    }
-    else {
-      if(charNeck.rotation.x < 0 || charBody.rotation.x < 0) {
-        character.position.y += charPosYIncrement;
-        charNeck.rotation.x += 0.06;
-        charBody.rotation.x += 0.04;
-      }
-    }
-  }
-  if(activeKeysPressed.includes(40) && !movingCharDueToDistance) { // down arrow
-    if(character.position.y > 27) {
-      character.position.y -= charPosYIncrement;
-      if(charPosYIncrement < 0.3) charPosYIncrement += 0.02;
-      if(charNeck.rotation.x < 0.6) charNeck.rotation.x += 0.06;
-      if(charBody.rotation.x < 0.4) charBody.rotation.x += 0.04;
-    }
-    else {
-      if(charNeck.rotation.x > 0 || charBody.rotation.x > 0) {
-        character.position.y -= charPosYIncrement;
-        charNeck.rotation.x -= 0.06;
-        charBody.rotation.x -= 0.04;
-      }
-    }
-  }
-
-  if(activeKeysPressed.includes(37)) { // left arrow
-    character.rotateY(charRotateYIncrement);
-    if(charRotateYIncrement < charRotateYMax) charRotateYIncrement += 0.0005;
-    if(charNeck.rotation.y > -0.7) charNeck.rotation.y -= 0.07;
-    if(charBody.rotation.y < 0.4) charBody.rotation.y += 0.04;
-  }
-  if(activeKeysPressed.includes(39)) { // right arrow
-    character.rotateY(-charRotateYIncrement);
-    if(charRotateYIncrement < charRotateYMax) charRotateYIncrement += 0.0005;
-    if(charNeck.rotation.y < 0.7) charNeck.rotation.y += 0.07;
-    if(charBody.rotation.y > -0.4) charBody.rotation.y -= 0.04;
-  }
-
-  // Revert
-
-  if(!activeKeysPressed.includes(38) && !activeKeysPressed.includes(40) ||
-    activeKeysPressed.includes(38) && activeKeysPressed.includes(40)) {
-    if(charPosYIncrement > 0) charPosYIncrement -= 0.02;
-    if(charNeck.rotation.x < 0 || charBody.rotation.x < 0) { // reverting from going up
-      character.position.y += charPosYIncrement;
-      charNeck.rotation.x += 0.06;
-      charBody.rotation.x += 0.04;
-    }
-    if(charNeck.rotation.x > 0 || charBody.rotation.x > 0) { // reverting from going down
-      character.position.y -= charPosYIncrement;
-      charNeck.rotation.x -= 0.06;
-      charBody.rotation.x -= 0.04;
-    }
-  }
-
-  if(!activeKeysPressed.includes(37) && !activeKeysPressed.includes(39) ||
-    activeKeysPressed.includes(37) && activeKeysPressed.includes(39)) {
-    if(charRotateYIncrement > 0) charRotateYIncrement -= 0.0005;
-    if(charNeck.rotation.y < 0 || charBody.rotation.y > 0) { // reverting from going left
-      character.rotateY(charRotateYIncrement);
-      charNeck.rotation.y += 0.07;
-      charBody.rotation.y -= 0.04;
-    }
-    if(charNeck.rotation.y > 0 || charBody.rotation.y < 0) { // reverting from going right
-      character.rotateY(-charRotateYIncrement);
-      charNeck.rotation.y -= 0.07;
-      charBody.rotation.y += 0.04;
-    }
-  }
-
-}
-
-const camUpdate = () => {
-
-  const calcIdealOffset = () => {
-    const idealOffset = thirdPerson ? new THREE.Vector3(0, camY, camZ) : new THREE.Vector3(0, 3, 7);
-    idealOffset.applyQuaternion(character.quaternion);
-    idealOffset.add(character.position);
-    return idealOffset;
-  }
-  
-  const calcIdealLookat = () => {
-    const idealLookat = thirdPerson ? new THREE.Vector3(0, -1.2, lookAtPosZ) : new THREE.Vector3(0, 0.5, lookAtPosZ + 5);
-    idealLookat.applyQuaternion(character.quaternion);
-    idealLookat.add(character.position);
-    return idealLookat;
-  }
-
-  if(!activeKeysPressed.length) {
-    if(character.position.y > 60 && lookAtPosZ > 5) lookAtPosZ -= 0.2;
-    if(character.position.y <= 60 && lookAtPosZ < 15) lookAtPosZ += 0.2;
-  }
-
-  const idealOffset = calcIdealOffset();
-  const idealLookat = calcIdealLookat(); 
-
-  currentPos.copy(idealOffset);
-  currentLookAt.copy(idealLookat);
-
-  camera.position.lerp(currentPos, 0.14);
-  camera.lookAt(currentLookAt);
-
-  if(camY > 7)    camY -= 0.5;
-  if(camZ < -10)  camZ += 0.5;
-  else {
-    if(flyingIn) {
-      setCharAnimation();
-      cleanUpClouds(); // This statement is called once when the fly in animation is compelte
-    }
-  }
-
-}
-
+// Collision detection
 const calcCharPos = () => {
-
-  raycaster.set(character.position, new THREE.Vector3(0, -1, -0.1));
-
+  if (!character) return;
+  
+  // Set up raycaster to detect ground below
+  raycaster.set(character.position, new THREE.Vector3(0, -1, 0));
+  
+  // Check for terrain intersections
   const intersects = raycaster.intersectObjects(terrainTiles.map(el => el.hex));
-
-  if(activeTile !== intersects[0].object.name) createSurroundingTiles(intersects[0].object.name);
-
-  if (intersects[0].distance < distance) {
-    movingCharDueToDistance = true;
-    character.position.y += doubleSpeed ? 0.3 : 0.1;
-  }
-  else {
-    if(movingCharDueToDistance && !movingCharTimeout) {
-      movingCharTimeout = setTimeout(() => {
-        movingCharDueToDistance = false;
-        movingCharTimeout = undefined;
-      }, 600);
+  
+  // Handle terrain tiles
+  if (intersects.length > 0) {
+    // Only update tiles if we've moved to a new section
+    if (activeTile !== intersects[0].object.name) {
+      createSurroundingTiles(intersects[0].object.name);
+    }
+    
+    // Avoid collisions with terrain
+    if (intersects[0].distance < distance) {
+      character.position.y += 0.5;
     }
   }
-
-  camUpdate();
   
-}
+  // Update camera to follow
+  camUpdate();
+};
+
+// No longer need pointer lock for the new control scheme
 
 const listenTo = () => {
-
-  window.addEventListener('resize', resize.bind(this));
-  window.addEventListener('keydown', keyDown.bind(this));
-  window.addEventListener('keyup', keyUp.bind(this));
+  // Set up input events
+  window.addEventListener('resize', resize);
+  window.addEventListener('keydown', keyDown);
+  window.addEventListener('keyup', keyUp);
+  
+  // Listen for mouse movement
+  document.addEventListener('mousemove', onMouseMove);
+  
+  // UI buttons
   document.querySelector('.hex-music')
-    .addEventListener('click', () => updateMusicVolume());
+    .addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent click from triggering pointer lock
+      updateMusicVolume();
+    });
   document.querySelector('.hex-info')
-    .addEventListener('click', () => toggleInfoModal());
+    .addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent click from triggering pointer lock
+      toggleInfoModal();
+    });
   document.querySelector('.info-close')
-    .addEventListener('click', () => toggleInfoModal(false));
+    .addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent click from triggering pointer lock
+      toggleInfoModal(false);
+    });
   document.querySelector('.hex-speed')
-    .addEventListener('click', () => toggleDoubleSpeed());
+    .addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent click from triggering pointer lock
+      toggleDoubleSpeed();
+    });
   document.querySelector('.hex-birds-eye')
-    .addEventListener('click', () => toggleBirdsEyeView());
+    .addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent click from triggering pointer lock
+      toggleBirdsEyeView();
+    });
+};
 
-}
+const spawnManaOrbs = () => {
+  if (orbsSpawned) return;
+  
+  const orbCount = 50; // Number of orbs to spawn
+  
+  // Create orbs in patterns and clusters for more interesting gameplay
+  for (let i = 0; i < orbCount; i++) {
+    // Create a simple sphere for our orb with better materials
+    const orbGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+    const orbMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x7B42F6,
+      emissive: 0x5428C0,
+      emissiveIntensity: 0.8,
+      transparent: true,
+      opacity: 0.8,
+      metalness: 0.7,
+      roughness: 0.2
+    });
+    
+    const orb = new THREE.Mesh(orbGeometry, orbMaterial);
+    
+    // Add a glow effect (optional)
+    const glowGeometry = new THREE.SphereGeometry(0.7, 16, 16);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: 0x5428C0,
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.BackSide
+    });
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    orb.add(glow);
+    
+    // Position orbs in more interesting patterns
+    let x, y, z;
+    
+    // Create some orbs in clusters, others in lines, and some random
+    if (i % 3 === 0) {
+      // Cluster pattern
+      const cluster = Math.floor(i / 3) % 5;
+      const angle = (i % 10) * Math.PI * 2 / 10;
+      const radius = 10 + (i % 5) * 2;
+      
+      x = Math.cos(angle) * radius + (cluster * 25 - 50);
+      z = Math.sin(angle) * radius + (cluster * 25 - 50);
+      y = 20 + Math.random() * 10;
+    } else if (i % 3 === 1) {
+      // Line pattern
+      const line = Math.floor(i / 10) % 3;
+      x = (i % 10) * 10 - 50;
+      z = line * 30 - 30;
+      y = 30 + Math.sin(i * 0.5) * 5;
+    } else {
+      // Random pattern
+      x = (Math.random() - 0.5) * 150;
+      y = Math.random() * 40 + 20;
+      z = (Math.random() - 0.5) * 150;
+    }
+    
+    orb.position.set(x, y, z);
+    orb.name = `manaOrb-${i}`;
+    
+    // Add to scene and track in array
+    scene.add(orb);
+    manaOrbs.push(orb);
+  }
+  
+  orbsSpawned = true;
+};
+
+const checkOrbCollisions = () => {
+  if (!character || manaOrbs.length === 0) return;
+  
+  const charPosition = character.position.clone();
+  const collectionDistance = 3; // How close to collect an orb
+  
+  for (let i = manaOrbs.length - 1; i >= 0; i--) {
+    const orb = manaOrbs[i];
+    if (!orb) continue;
+    
+    const distance = charPosition.distanceTo(orb.position);
+    
+    // Add magnetic effect when getting close to orbs
+    const magneticRange = 8;
+    if (distance < magneticRange && distance > collectionDistance) {
+      // Create a vector from orb to character
+      const pull = charPosition.clone().sub(orb.position);
+      pull.normalize().multiplyScalar(0.1 * (magneticRange - distance) / magneticRange);
+      
+      // Move orb toward character
+      orb.position.add(pull);
+    }
+    
+    // Check for collision
+    if (distance < collectionDistance) {
+      // Update score
+      orbCount++;
+      document.getElementById('orb-count').textContent = orbCount;
+      
+      // Remove orb with a small visual effect
+      const orbPosition = orb.position.clone();
+      scene.remove(orb);
+      manaOrbs.splice(i, 1);
+      
+      // Play sound effect
+      if (collectSound) collectSound.play();
+    }
+    
+    // Animate orb
+    if (orb) {
+      orb.rotation.y += 0.01;
+      orb.rotation.x += 0.005;
+      
+      // More natural floating motion
+      const time = clock.getElapsedTime();
+      orb.position.y += Math.sin(time * 1.5 + i * 0.5) * 0.015;
+      
+      // Subtle horizontal movement
+      orb.position.x += Math.sin(time * 0.8 + i * 1.1) * 0.003;
+      orb.position.z += Math.cos(time * 0.7 + i * 0.9) * 0.003;
+    }
+  }
+};
 
 const cleanUp = (obj) => {
-
   if(obj.geometry && obj.material) {
     obj.geometry.dispose();
     obj.material.dispose();
@@ -1052,32 +1175,29 @@ const cleanUp = (obj) => {
 
   scene.remove(obj);
   renderer.renderLists.dispose();
-
-}
+};
 
 const render = () => {
-
   if(loadingDismissed) {
     determineMovement();
     calcCharPos();
     if(flyingIn) animateClouds();
     if(mixer) mixer.update(clock.getDelta());
   
-  // Only spawn orbs after flying in
-  if(!flyingIn && !orbsSpawned) {
-    spawnManaOrbs();
+    // Only spawn orbs after flying in
+    if(!flyingIn && !orbsSpawned) {
+      spawnManaOrbs();
+    }
+    
+    // Check for orb collections
+    if(!flyingIn && orbsSpawned) {
+      checkOrbCollisions();
+    }
   }
   
-  // Check for orb collections
-  if(!flyingIn && orbsSpawned) {
-    checkOrbCollisions();
-  }
-  }
   renderer.render(scene, camera);
-
-  requestAnimationFrame(render.bind(this))
-
-}
+  requestAnimationFrame(render);
+};
 
 const playMusic = () => {
   try {
@@ -1092,22 +1212,19 @@ const playMusic = () => {
   } catch(error) {
     console.error('Error playing background music:', error);
   }
-}
+};
 
 const updateMusicVolume = () => {
-  
   muteBgMusic = !muteBgMusic;
   bgMusic.volume(muteBgMusic ? 0 : 0.01);
 
   document.getElementById('sound').src = 
     muteBgMusic ? 
     'assets/icons/sound-off.svg' :
-    'assets/icons/sound-on.svg'
-
+    'assets/icons/sound-on.svg';
 };
 
 const pauseIconAnimation = (pause = true) => {
-
   if(pause) {
     document.querySelector('.hex-music').classList.add('js-loading');
     document.querySelector('.hex-info').classList.add('js-loading');
@@ -1120,11 +1237,9 @@ const pauseIconAnimation = (pause = true) => {
   document.querySelector('.hex-info').classList.remove('js-loading');
   document.querySelector('.hex-speed').classList.remove('js-loading');
   document.querySelector('.hex-birds-eye').classList.remove('js-loading');
-
-}
+};
 
 const toggleInfoModal = (display = true) => {
-
   infoModalDisplayed = display;
 
   if(display) return gsap.timeline()
@@ -1138,7 +1253,7 @@ const toggleInfoModal = (display = true) => {
     .to('.info-box', {
       opacity:  1,
       duration: 1
-    })
+    });
 
   gsap.timeline()
     .to('.info-box', {
@@ -1151,57 +1266,11 @@ const toggleInfoModal = (display = true) => {
     })
     .to('.info-modal-page', {
       zIndex: -1
-    })
+    });
+};
 
-}
+// Hide loading screen immediately
+document.querySelector('.page-loader').style.display = 'none';
 
-const checkLoadingPage = () => {
-
-  let loadingCounter  = 0;
-  loadingDismissed    = false;
-
-  const checkAssets = () => {
-
-    let allAssetsLoaded = true;
-
-    if(!scene)                                  allAssetsLoaded = false;
-    if(!clouds.length === 2)                    allAssetsLoaded = false;
-    if(!character)                              allAssetsLoaded = false;
-    if(!Object.keys(grassMeshes).length === 2)  allAssetsLoaded = false;
-    if(!Object.keys(treeMeshes).length === 2)   allAssetsLoaded = false;
-    if(!activeTile)                             allAssetsLoaded = false;
-    if(loadingCounter < 6)                      allAssetsLoaded = false;
-    if(loadingCounter > 50)                     allAssetsLoaded = true;
-    if(allAssetsLoaded)                         return dismissLoading();
-
-    loadingCounter++;
-    setTimeout(checkAssets, 500);
-
-  }
-
-  const dismissLoading = () => {
-
-    gsap.timeline()
-      .to('.loader-container', {
-        opacity:  0,
-        duration: 0.6
-      })
-      .to('.page-loader', {
-        opacity:  0,
-        duration: 0.6
-      })
-      .to('.page-loader', {
-        display: 'none'
-      })
-      .then(() => {
-        loadingDismissed = true;
-        pauseIconAnimation(false);
-      });
-    
-  }
-
-  checkAssets();
-
-}
-
+// Start everything
 setScene();
